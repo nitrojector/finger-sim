@@ -2,3 +2,5 @@
 __pycache__
 failedPlots
 test_vu.py
+saves/
+vid/
