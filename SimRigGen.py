@@ -46,6 +46,8 @@ plotIndv = False
 normDispLen = 10
 VERBOSE = False
 saveData = True
+printError = False
+filterOn = True
 
 # SIM_MODE=2 Params
 scanLvl = 90
@@ -55,7 +57,6 @@ prefConcave = True
 # SIM_MODE=3 Params
 motionPt1 = [0, 0]
 motionPt2 = [30, 30]
-
 
 # ### Set points and constraints ####
 mP1 = array([-40, 0])
@@ -76,9 +77,12 @@ def plotStickModel(data, style=1, ang=[0]):
                           f'θ3={round(ang[3], 3)}° '
                           f'θ4={round(ang[4], 3)}°')
     if style >= 1:
-        ax.plot([mP1[0], mP2[0]], [mP1[1], mP2[1]], '#000000')
-        ax.plot([mP2[0], data[2]], [mP2[1], data[3]], 'b')
-        ax.plot([mP1[0], data[0]], [mP1[1], data[1]], 'b')
+        ax.plot([data[10], data[12]], [data[11], data[13]], '#000000')
+        ax.plot([data[12], data[2]], [data[13], data[3]], 'b')
+        ax.plot([data[10], data[0]], [data[11], data[1]], 'b')
+        # ax.plot([mP1[0], mP2[0]], [mP1[1], mP2[1]], '#000000')
+        # ax.plot([mP2[0], data[2]], [mP2[1], data[3]], 'b')
+        # ax.plot([mP1[0], data[0]], [mP1[1], data[1]], 'b')
         ax.plot([data[0], data[4]], [data[1], data[5]], 'c')
         ax.plot([data[2], data[6]], [data[3], data[7]], 'c')
         ax.plot(data[8], data[9], 'r^')
@@ -105,26 +109,30 @@ def showPlot(title=''):
         plt.title(f'θ1={round(np.rad2deg(theta1), 3)}° θ2={round(np.rad2deg(theta2), 3)}°')
     else:
         plt.title(title)
-    plt.xlim(mP1[0] - dJoint1 - dJoint2 / 2, mP1[1] + dJoint1 + dJoint2 / 2)
-    plt.ylim(0, dJoint1 + dJoint2 + 5)
-    plt.gca().set_aspect('equal', adjustable='box')
+    ax.set_xlim(mP1[0] - dJoint1 - dJoint2 / 2, mP1[1] + dJoint1 + dJoint2 / 2)
+    ax.set_ylim(0, dJoint1 + dJoint2 + 5)
+    ax.set_aspect('equal')
     plt.figure(dpi=1200)
     plt.show()
 
 
 def getCurrentState(precision=3):
-    global mP3, mP4, mP5, mP6, mP7
+    global mP3, mP4, mP5, mP6, mP7, mP1, mP2
     if precision == 0:
         return [mP3[0], mP3[1],
                 mP4[0], mP4[1],
                 mP5[0], mP5[1],
                 mP6[0], mP6[1],
-                mP7[0], mP7[1]]
+                mP7[0], mP7[1],
+                mP1[0], mP1[1],
+                mP2[0], mP2[1]]
     return np.round([mP3[0], mP3[1],
                      mP4[0], mP4[1],
                      mP5[0], mP5[1],
                      mP6[0], mP6[1],
-                     mP7[0], mP7[1]], decimals=precision)
+                     mP7[0], mP7[1],
+                     mP1[0], mP1[1],
+                     mP2[0], mP2[1]], decimals=precision)
 
 
 def getAngleState(precision=3):
@@ -138,8 +146,7 @@ def getAngleState(precision=3):
 def getPlotAsImage():
     ax.set_xlim([-100, 100])
     ax.set_ylim([0, dJoint1 + dJoint2 + 5])
-    plt.gca().set_aspect('equal', adjustable='box')
-    plt.figure(dpi=1200)
+    ax.axis('equal')
 
     canvas.draw()  # draw the canvas, cache the renderer
 
@@ -165,30 +172,36 @@ for theta1 in np.arange(t1Range[0], t1Range[1], simStep):
             plt.clf()
             try:
                 # theta3 = 0
-                mP3 = vu.ang2DVector(mP1, theta1, dJoint1)
-                mP4 = vu.ang2DVector(mP2, -theta2, dJoint1)
-                mP5 = vu.ang2DVector(mP3, theta3, dJoint2)
+                mP3 = vu.ang2DVector(mP1, -theta1, dJoint1)
+                mP4 = vu.ang2DVector(mP2, theta2, dJoint1)
+                mP5 = vu.ang2DVector(mP3 - mP1, -theta3, dJoint2) + mP1
                 mP6 = vu.getMidPt(mP5, objLen, mP4, dJoint2)
                 mP7 = vu.getCenterPt(mP5, mP6)
+                print(np.linalg.norm(mP5 - mP3))
                 # Success in theoretical calculations
+
+                # print(f'theta3={theta3}\t(c)theta3={vu.getAngBtw(mP5 - mP3, mP3 - mP1)}')
 
                 # Recalculating Theta 4
                 theta4 = vu.getAngBtw(mP6 - mP4, mP4 - mP2)
 
                 # Check for alignment with cone of friction
-                if abs(vu.getAngBtw(mP6 - mP5, vu.getPerpVectorCW(mP5 - mP3))) > COF_ANGLE or \
-                        abs(vu.getAngBtw(mP5 - mP6, vu.getPerpVectorCCW(mP6 - mP4))) > COF_ANGLE:
-                    # print('!0', end='')
+                if filterOn and (abs(vu.getAngBtw(mP6 - mP5, vu.getPerpVectorCW(mP5 - mP3))) > COF_ANGLE or
+                        abs(vu.getAngBtw(mP5 - mP6, vu.getPerpVectorCCW(mP6 - mP4))) > COF_ANGLE):
+                    if printError:
+                        print('[!0]', end='')
                     raise ArithmeticError('Cone of friction range unfulfilled')
 
                 # Check for level scan fulfillment
-                if SIM_MODE == 2 and (mP7[1] < scanLvl - tolerance or mP7[1] > scanLvl + tolerance):
-                    # print('!1', end='')
+                if filterOn and SIM_MODE == 2 and (mP7[1] < scanLvl - tolerance or mP7[1] > scanLvl + tolerance):
+                    if printError:
+                        print('[!1]', end='')
                     raise ArithmeticError('Level requirement unfulfilled')
 
                 # Check if theta4 is too extreme
-                if abs(theta4) > np.pi / 2:
-                    # print('!2', end='')
+                if filterOn and abs(theta4) > np.pi / 2:
+                    if printError:
+                        print('[!2]', end='')
                     raise ArithmeticError('Theta 4 is unrealistic')
 
                 # Preference test for concave holding
@@ -209,7 +222,9 @@ for theta1 in np.arange(t1Range[0], t1Range[1], simStep):
                 #     # print('!3L', end='')
                 #     raise ArithmeticError('Prefer concave [Right]')
 
-                if SIM_MODE == 2 and (vu.getAngBtw(mP5 - mP3, mP3 - mP1) < 0 or vu.getAngBtw(mP6 - mP4, mP4 - mP2) > 0):
+                if filterOn and SIM_MODE == 2 and (vu.getAngBtw(mP5 - mP3, mP3 - mP1) < 0 or vu.getAngBtw(mP6 - mP4, mP4 - mP2) > 0):
+                    if printError:
+                        print('[!3]', end='')
                     raise ArithmeticError('Prefer concave')
 
                 # Record max and min position of joint for level scanning
@@ -217,8 +232,8 @@ for theta1 in np.arange(t1Range[0], t1Range[1], simStep):
                     jointLvlRefLocMax = getCurrentState(0)
                 if SIM_MODE == 2 and mP7[0] < jointLvlRefLocMin[8]:
                     jointLvlRefLocMin = getCurrentState(0)
-
-                # plotStickModel(getCurrentState(0), 2)
+                if plotIndv:
+                    plotStickModel(getCurrentState(0), 2, ang=getAngleState(0))
 
                 scatterPts[0].append(mP7[0])
                 scatterPts[1].append(mP7[1])
@@ -231,12 +246,13 @@ for theta1 in np.arange(t1Range[0], t1Range[1], simStep):
 
                 plotCount += 1
 
-                # cv.imshow('Plot', getPlotAsImage())
-                resp = cv.waitKey(10)
-                if resp & 0xFF == ord('p'):
-                    cv.waitKey(0)
-                elif resp & 0xFF == ord('q'):
-                    exit(0)
+                if plotIndv:
+                    cv.imshow('Plot', getPlotAsImage())
+                    resp = cv.waitKey(10)
+                    if resp & 0xFF == ord('p'):
+                        cv.waitKey(0)
+                    elif resp & 0xFF == ord('q'):
+                        sys.exit(0)
 
                 ax.clear()
 
@@ -249,8 +265,6 @@ for theta1 in np.arange(t1Range[0], t1Range[1], simStep):
                 continue
 
         # print('-', end='')
-    if plotIndv and plotCount > 0:
-        showPlot()
     # print('+')
     print(f'Progress -> [{int((theta1 - t1Range[0]) / (t1Range[1] - t1Range[0]) * 50) * "+"}'
           f'{(50 - int((theta1 - t1Range[0]) / (t1Range[1] - t1Range[0]) * 50)) * "-"}]\t'
@@ -274,10 +288,10 @@ if SIM_MODE == 3:
 if saveData:
     try:
         fid = '%032x' % random.getrandbits(128)
-        np.savetxt(f"./saves/{SESS_NAME}-Pos-{fid}.csv", np.asarray(savesPts), delimiter=",", fmt='%f')
-        np.savetxt(f"./saves/{SESS_NAME}-Ang-{fid}.csv", np.asarray(savesAngle), delimiter=",", fmt='%f')
+        np.savetxt(f"./saves/{SESS_NAME}-Pos-lvl{scanLvl}-SA1\'{int(np.pi / simStep)}-({fid}).csv", np.asarray(savesPts), delimiter=",", fmt='%f')
+        np.savetxt(f"./saves/{SESS_NAME}-Ang-lvl{scanLvl}-SA1\'{int(np.pi / simStep)}-({fid}).csv", np.asarray(savesAngle), delimiter=",", fmt='%f')
         print(f'Data successfully saved with SESS_NAME: {fid}')
-        if SIM_MODE == 2: print(f'PARAM_STRING: lvl{scanLvl}-SA1\'{int(np.pi/simStep)}-({fid})')
+        if SIM_MODE == 2: print(f'PARAM_STRING: lvl{scanLvl}-SA1\'{int(np.pi / simStep)}-({fid})')
     except IOError:
         print(f'Save failed with SESS_NAME: {fid}')
 
@@ -286,6 +300,7 @@ if SIM_MODE == 2:
     while True:
         for valPts, valAng in zip(savesPts, savesAngle):
             plotStickModel(valPts, style=2, ang=valAng)
+            # print(valAng)
             cv.imshow('Plot', getPlotAsImage())
             resp = cv.waitKey(10)
             if resp & 0xFF == ord('p'):
@@ -295,6 +310,7 @@ if SIM_MODE == 2:
             ax.clear()
         for valPts, valAng in zip(np.flip(savesPts, axis=0), np.flip(savesAngle, axis=0)):
             plotStickModel(valPts, style=2, ang=valAng)
+            # print(valAng)
             cv.imshow('Plot', getPlotAsImage())
             resp = cv.waitKey(10)
             if resp & 0xFF == ord('p'):

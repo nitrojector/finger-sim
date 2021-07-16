@@ -1,6 +1,20 @@
 import numpy as np
 
 
+def getLinesAsFormulas(data):
+    mP1 = np.array([-40, 0])
+    mP2 = np.array([40, 0])
+    print(ptsToFormula([mP1[0], mP2[0]], [mP1[1], mP2[1]]))
+    print(ptsToFormula([mP2[0], data[2]], [mP2[1], data[3]]))
+    print(ptsToFormula([mP1[0], data[0]], [mP1[1], data[1]]))
+    print(ptsToFormula([data[0], data[4]], [data[1], data[5]]))
+    print(ptsToFormula([data[2], data[6]], [data[3], data[7]]))
+
+
+def ptsToFormula(x, y) -> str:
+    return f'((1-t)*{x[0]}+t*{x[1]},(1-t)*{y[0]}+t*{y[1]})'
+
+
 def getAngBtw(v1, v2):
     dot = v1[0] * v2[0] + v1[1] * v2[1]  # dot product between [x1, y1] and [x2, y2]
     det = v1[0] * v2[1] - v1[1] * v2[0]  # determinant
@@ -21,11 +35,12 @@ def getCenterPt(p1, p2):
 
 
 def ang2DVector(v1, theta, magnitude):
-    # return v1 + magnitude * normalize(vectorRot(v1, theta)
-    rel_x = magnitude * np.sin(np.arctan2(v1[0], v1[1]))
-    rel_y = magnitude * np.cos(np.arctan2(v1[0], v1[1]))
-    v2x = rel_x * np.cos(theta) + rel_y * np.sin(theta) + v1[0]
-    v2y = rel_y * np.cos(theta) - rel_x * np.sin(theta) + v1[1]
+    rel_x = v1[0] / np.linalg.norm(v1)
+    rel_y = v1[1] / np.linalg.norm(v1)
+    v2x = magnitude * (rel_x * np.cos(theta) - rel_y * np.sin(theta)) + v1[0]
+    v2y = magnitude * (rel_y * np.cos(theta) + rel_x * np.sin(theta)) + v1[1]
+    # return v1 + magnitude * normalize(vectorRot(v1, theta))
+    # print(v1, theta, magnitude, v2x, v2y)
     return np.array([v2x, v2y])
 
 
