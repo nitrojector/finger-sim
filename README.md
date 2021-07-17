@@ -1,2 +1,2 @@
 # finger-sim
-A series of simulation programs for two-jointed finger tips grabbing an object.
+A series of simulation programs for two-jointed finger tips object fetching.
