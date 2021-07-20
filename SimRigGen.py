@@ -3,7 +3,7 @@
 A complete rewrite of simRigScanning.py and simRigLevel.py
 out of frustration of the chaos and mess in those two programs
 
-Dependency:
+Dependencies:
     vu.py
 
 """
@@ -25,21 +25,24 @@ savesAngle = []
 savesPts = []
 
 # Internal
-jointLvlRefLocMax = np.zeros(10)  # [0:mP3x, 1:mP3y, 2:mP4x, 3:mP4y, 4:mP5x, 5:mP5y, 6:mP6x, 7:mP6y, 8:mP7x, 9:mP7y]
-jointLvlRefLocMin = np.zeros(10)  # [0:mP3x, 1:mP3y, 2:mP4x, 3:mP4y, 4:mP5x, 5:mP5y, 6:mP6x, 7:mP6y, 8:mP7x, 9:mP7y]
+jointLvlRefLocMax = np.zeros(
+    10)  # [0:mP3x, 1:mP3y, 2:mP4x, 3:mP4y, 4:mP5x, 5:mP5y, 6:mP6x, 7:mP6y, 8:mP7x, 9:mP7y, 10:mP1x, 11:mP1y, 12:mP2x, 13:mP2y]
+jointLvlRefLocMin = np.zeros(
+    10)  # [0:mP3x, 1:mP3y, 2:mP4x, 3:mP4y, 4:mP5x, 5:mP5y, 6:mP6x, 7:mP6y, 8:mP7x, 9:mP7y, 10:mP1x, 11:mP1y, 12:mP2x, 13:mP2y]
 
 # ### Parameters (Changeable) ####
 
 # 1: Regular scanning through θ1->θ2->θ3~>θ4 with reports for every θ1,θ2 combination
 # 2: Level pass with scanLvl for motion along a line
 # 3: Linear pass with motion from motionPt1 -> motionPt2
+# 4: Find the max range from all data scanned and get a even amount of points
 SIM_MODE = 2
 
-simStep = np.pi / 50
+simStep = np.pi / 75
 mu = 0.66
 t1Range = [np.pi / 4, 2 * np.pi / 3]
 t2Range = [np.pi / 4, 2 * np.pi / 3]
-t3Range = [-np.pi / 2, np.pi / 2]
+t3Range = [-16 * np.pi / 180, np.pi / 2]
 
 # Global SIM_MODE Params
 plotIndv = False
@@ -80,9 +83,6 @@ def plotStickModel(data, style=1, ang=[0]):
         ax.plot([data[10], data[12]], [data[11], data[13]], '#000000')
         ax.plot([data[12], data[2]], [data[13], data[3]], 'b')
         ax.plot([data[10], data[0]], [data[11], data[1]], 'b')
-        # ax.plot([mP1[0], mP2[0]], [mP1[1], mP2[1]], '#000000')
-        # ax.plot([mP2[0], data[2]], [mP2[1], data[3]], 'b')
-        # ax.plot([mP1[0], data[0]], [mP1[1], data[1]], 'b')
         ax.plot([data[0], data[4]], [data[1], data[5]], 'c')
         ax.plot([data[2], data[6]], [data[3], data[7]], 'c')
         ax.plot(data[8], data[9], 'r^')
@@ -98,6 +98,8 @@ def plotStickModel(data, style=1, ang=[0]):
         ax.plot([data[6], data[6] + (normDispLen * vu.getPerpVectorCCW(mV6 - mV4))[0]],
                 [data[7], data[7] + (normDispLen * vu.getPerpVectorCCW(mV6 - mV4))[1]],
                 'm', linestyle='dashed')
+        circle1 = plt.Circle((data[8], data[9]), objLen / 2, color="red", fill=False)
+        ax.add_patch(circle1)
     if SIM_MODE == 2:
         ax.plot([-90, 90], [scanLvl + tolerance, scanLvl + tolerance], '--x', linestyle='dashed')
         ax.plot([-90, 90], [scanLvl - tolerance, scanLvl - tolerance], '--x', linestyle='dashed')
@@ -177,7 +179,6 @@ for theta1 in np.arange(t1Range[0], t1Range[1], simStep):
                 mP5 = vu.ang2DVector(mP3 - mP1, -theta3, dJoint2) + mP1
                 mP6 = vu.getMidPt(mP5, objLen, mP4, dJoint2)
                 mP7 = vu.getCenterPt(mP5, mP6)
-                print(np.linalg.norm(mP5 - mP3))
                 # Success in theoretical calculations
 
                 # print(f'theta3={theta3}\t(c)theta3={vu.getAngBtw(mP5 - mP3, mP3 - mP1)}')
@@ -187,7 +188,7 @@ for theta1 in np.arange(t1Range[0], t1Range[1], simStep):
 
                 # Check for alignment with cone of friction
                 if filterOn and (abs(vu.getAngBtw(mP6 - mP5, vu.getPerpVectorCW(mP5 - mP3))) > COF_ANGLE or
-                        abs(vu.getAngBtw(mP5 - mP6, vu.getPerpVectorCCW(mP6 - mP4))) > COF_ANGLE):
+                                 abs(vu.getAngBtw(mP5 - mP6, vu.getPerpVectorCCW(mP6 - mP4))) > COF_ANGLE):
                     if printError:
                         print('[!0]', end='')
                     raise ArithmeticError('Cone of friction range unfulfilled')
@@ -198,34 +199,18 @@ for theta1 in np.arange(t1Range[0], t1Range[1], simStep):
                         print('[!1]', end='')
                     raise ArithmeticError('Level requirement unfulfilled')
 
-                # Check if theta4 is too extreme
-                if filterOn and abs(theta4) > np.pi / 2:
+                # Check if theta4 is unreachable
+                if filterOn and not -t3Range[0] > theta4 > -t3Range[1]:
                     if printError:
                         print('[!2]', end='')
-                    raise ArithmeticError('Theta 4 is unrealistic')
+                    raise ArithmeticError('Theta 4 is unreachable')
 
-                # Preference test for concave holding
-
-                # if prefConcave and vu.getAngBtw(mP3, mP5 - mP3) > np.pi and mP7[0] < 0:
-                #     print('!3L', end='')
-                #     raise ArithmeticError('Prefer concave [Left]')
-                #
-                # if prefConcave and vu.getAngBtw(mP4, mP6 - mP4) < np.pi and mP7[0] > 0:
-                #     print('!3L', end='')
-                #     raise ArithmeticError('Prefer concave [Right]')
-
-                # if prefConcave and theta3 < 0 > mP7[0]:
-                #     # print('!3L', end='')
-                #     raise ArithmeticError('Prefer concave [Left]')
-                #
-                # if prefConcave and theta4 > 0 < mP7[0]:
-                #     # print('!3L', end='')
-                #     raise ArithmeticError('Prefer concave [Right]')
-
-                if filterOn and SIM_MODE == 2 and (vu.getAngBtw(mP5 - mP3, mP3 - mP1) < 0 or vu.getAngBtw(mP6 - mP4, mP4 - mP2) > 0):
-                    if printError:
-                        print('[!3]', end='')
-                    raise ArithmeticError('Prefer concave')
+                # Preference test for inward holding
+                # ### Unnecessary after angle constraint?
+                # if filterOn and SIM_MODE == 2 and (vu.getAngBtw(mP5 - mP3, mP3 - mP1) < 0 or vu.getAngBtw(mP6 - mP4, mP4 - mP2) > 0):
+                #     if printError:
+                #         print('[!3]', end='')
+                #     raise ArithmeticError('Concavity rejected')
 
                 # Record max and min position of joint for level scanning
                 if SIM_MODE == 2 and mP7[0] > jointLvlRefLocMax[8]:
@@ -279,23 +264,31 @@ savesPts = sorted(savesPts, key=lambda x: x[8])
 
 # Saving data as .csv
 SESS_NAME = 'simRigGen'
-if SIM_MODE == 2:
-    SESS_NAME += '[Lvl]'
-
-if SIM_MODE == 3:
-    SESS_NAME += '[Lin]'
+if SIM_MODE == 1:
+    SESS_NAME += '[Scan]'
+elif SIM_MODE == 2:
+    SESS_NAME += '[Level]'
+elif SIM_MODE == 3:
+    SESS_NAME += '[Linear]'
+elif SIM_MODE == 4:
+    SESS_NAME += '[Interval]'
 
 if saveData:
     try:
         fid = '%032x' % random.getrandbits(128)
-        np.savetxt(f"./saves/{SESS_NAME}-Pos-lvl{scanLvl}-SA1\'{int(np.pi / simStep)}-({fid}).csv", np.asarray(savesPts), delimiter=",", fmt='%f')
-        np.savetxt(f"./saves/{SESS_NAME}-Ang-lvl{scanLvl}-SA1\'{int(np.pi / simStep)}-({fid}).csv", np.asarray(savesAngle), delimiter=",", fmt='%f')
+        np.savetxt(f"./saves/{SESS_NAME}-Pos-objLen{objLen}-lvl{scanLvl}-SA1\'{round(np.pi / simStep)}-{fid}.csv",
+                   np.asarray(savesPts), delimiter=",", fmt='%f')
+        np.savetxt(f"./saves/{SESS_NAME}-Ang-objLen{objLen}-lvl{scanLvl}-SA1\'{round(np.pi / simStep)}-{fid}.csv",
+                   np.asarray(savesAngle), delimiter=",", fmt='%f')
         print(f'Data successfully saved with SESS_NAME: {fid}')
-        if SIM_MODE == 2: print(f'PARAM_STRING: lvl{scanLvl}-SA1\'{int(np.pi / simStep)}-({fid})')
+        if SIM_MODE == 1:
+            print(f'PARAM_STRING: objLen{objLen}-SA1\'{round(np.pi / simStep)}-{fid}')
+        elif SIM_MODE == 2:
+            print(f'PARAM_STRING: lvl{scanLvl}-objLen{objLen}-SA1\'{round(np.pi / simStep)}-{fid}')
     except IOError:
         print(f'Save failed with SESS_NAME: {fid}')
 
-if SIM_MODE == 2:
+if SIM_MODE == 2 or SIM_MODE == 1:
     print('Replaying simulation. [p] to pause, [q] to quit')
     while True:
         for valPts, valAng in zip(savesPts, savesAngle):
